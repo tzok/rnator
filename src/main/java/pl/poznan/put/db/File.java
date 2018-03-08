@@ -1,18 +1,24 @@
 package pl.poznan.put.db;
 
+import java.util.Objects;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.OneToOne;
 import javax.persistence.Table;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table
-@Data
 @NoArgsConstructor
+@Getter
+@Setter
+@EqualsAndHashCode(of = "id")
 public class File {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -20,8 +26,17 @@ public class File {
 
   @Column private String path;
 
-  @Column private String checksum;
+  @Column private boolean processed;
 
-  @Column(name = "has_rna")
-  private boolean hasRna;
+  @OneToOne(mappedBy = "file")
+  private Structure structure;
+
+  public void setStructure(final Structure structure) {
+    if (Objects.equals(this.structure, structure)) {
+      return;
+    }
+
+    this.structure = structure;
+    structure.setFile(this);
+  }
 }

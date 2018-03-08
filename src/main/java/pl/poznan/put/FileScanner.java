@@ -1,9 +1,9 @@
 package pl.poznan.put;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -11,9 +11,10 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FileUtils;
-import pl.poznan.put.db.service.FileService;
-import pl.poznan.put.utility.ExecHelper;
+import pl.poznan.put.db.File;
+import pl.poznan.put.db.service.DatabaseService;
 
+@Slf4j
 public final class FileScanner {
   private static final Option PATH_OPTION =
       Option.builder("p")
@@ -21,7 +22,7 @@ public final class FileScanner {
           .desc("Base path which will be searched recursively for mmCIF files")
           .required()
           .numberOfArgs(1)
-          .type(File.class)
+          .type(java.io.File.class)
           .build();
   private static final Options OPTIONS = new Options().addOption(FileScanner.PATH_OPTION);
 
@@ -29,42 +30,43 @@ public final class FileScanner {
     final CommandLineParser parser = new DefaultParser();
     final CommandLine commandLine = parser.parse(FileScanner.OPTIONS, args);
     final FileScanner scanner =
-        new FileScanner((File) commandLine.getParsedOptionValue(FileScanner.PATH_OPTION.getOpt()));
+        new FileScanner(
+            (java.io.File) commandLine.getParsedOptionValue(FileScanner.PATH_OPTION.getOpt()));
     scanner.scan();
   }
 
-  private final File baseDirectory;
+  private final java.io.File baseDirectory;
 
-  private FileScanner(final File baseDirectory) {
+  private FileScanner(final java.io.File baseDirectory) {
     super();
     this.baseDirectory = baseDirectory;
   }
 
-  private void scan() throws IOException {
-    final FileService manager = new FileService();
+  private void scan() {
+    final DatabaseService service = new DatabaseService();
 
     try {
-      final Iterator<File> iterator =
-          FileUtils.iterateFiles(baseDirectory, new String[] {"cif.gz"}, true);
+      final Iterator<java.io.File> iterator =
+          FileUtils.iterateFiles(baseDirectory, new String[] {"cif"}, true);
 
       while (iterator.hasNext()) {
-        final File file = iterator.next();
-        final String stdout = ExecHelper.execute("md5sum", file.getAbsolutePath());
-        final String checksum = stdout.split("\\s")[0];
+        final java.io.File file = iterator.next();
+        FileScanner.log.debug("Processing file: {}", file);
 
-        final Optional<pl.poznan.put.db.File> optional =
-            manager.getFileByPath(file.getAbsolutePath());
+        final Optional<File> optional = service.getFileByPath(file.getAbsolutePath());
         if (!optional.isPresent()) {
-          final pl.poznan.put.db.File fileDb = new pl.poznan.put.db.File();
+          final File fileDb = new File();
           fileDb.setPath(file.getAbsolutePath());
-          fileDb.setChecksum(checksum);
-          manager.getTransaction().begin();
-          manager.persist(fileDb);
-          manager.getTransaction().commit();
+
+          service.beginTransaction();
+          service.persist(fileDb);
+          service.commit();
         }
       }
+
+      FileScanner.log.info("Successfully finished scanning filesystem");
     } finally {
-      manager.close();
+      service.close();
     }
   }
 }
